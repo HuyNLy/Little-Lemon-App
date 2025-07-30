@@ -1,2 +1,3 @@
 # Little-Lemon-App
-Meta
+Meta Course Project- ReactNative-Capstone
+
