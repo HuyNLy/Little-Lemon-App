@@ -1,25 +1,29 @@
 import { validateEmail, validateName, validatePhone } from '@/utils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Checkbox from 'expo-checkbox';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { MaskedTextInput } from 'react-native-mask-text';
+
 import {
-    Image,
-    ImageBackground,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Image,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 const ProfileScreen = ({ navigation }: any) => {
+
   const [profile, setProfile] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+    firstName: "",
+    lastName: "",
+    email: "",
     phone: '',
     image: '',
     exclusiveOffers: false,
@@ -56,22 +60,38 @@ const ProfileScreen = ({ navigation }: any) => {
     }));
   };
 
-  const saveProfile = () => {
-    if (
-      validateEmail(profile.email) &&
-      validateName(profile.firstName) &&
-      validateName(profile.lastName) &&
-      validatePhone(profile.phone)
-    ) {
-      console.log('Profile saved:', profile);
-    } else {
-      console.log('Invalid profile data');
+  const saveProfile = async (profileData: any) => {
+    try {
+      await AsyncStorage.setItem('profile', JSON.stringify(profileData));
+      console.log('Profile saved!', profileData);
+    } catch (error) {
+      console.error('Error saving profile:', error);
     }
   };
 
+  const getIsFormValid = (data: any) => {
+    return (
+      validateName(data.firstName) &&
+      validateName(data.lastName) &&
+      validateEmail(data.email) &&
+      validatePhone(data.phone)
+    );
+  };
+  
+  useEffect(() => {
+    const loadProfile = async () => {
+      const stored = await AsyncStorage.getItem('profile');
+      if (stored) setProfile(JSON.parse(stored));
+    };
+    loadProfile();
+  }, []);
+  
+  
+  
+
   return (
     <ImageBackground
-      source={require('../../assets/images/Lemon dessert.png')}
+      source={require('../../assets/images/lemonDessert.png')}
       resizeMode="cover"
       style={{ flex: 1 }}
     >
@@ -111,9 +131,9 @@ const ProfileScreen = ({ navigation }: any) => {
               <TextInput
                 placeholder="Enter your first name..."
                 placeholderTextColor="#FBDABB"
-                style={styles.input}
-                value={profile.firstName}
                 onChangeText={(text) => updateProfile('firstName', text)}
+                value={profile.firstName}
+                style={[styles.input, !validateName(profile.firstName) && styles.inputError]}
                 autoCapitalize="words"
               />
 
@@ -121,7 +141,7 @@ const ProfileScreen = ({ navigation }: any) => {
               <TextInput
                 placeholder="Enter your last name..."
                 placeholderTextColor="#FBDABB"
-                style={styles.input}
+                style={[styles.input, !validateName(profile.lastName) && styles.inputError]}
                 value={profile.lastName}
                 onChangeText={(text) => updateProfile('lastName', text)}
                 autoCapitalize="words"
@@ -132,19 +152,23 @@ const ProfileScreen = ({ navigation }: any) => {
                 placeholder="Enter your email..."
                 keyboardType="email-address"
                 placeholderTextColor="#FBDABB"
-                style={styles.input}
+                style={[styles.input, !validateEmail(profile.email) && styles.inputError]}
                 value={profile.email}
                 onChangeText={(text) => updateProfile('email', text)}
               />
 
               <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                placeholder="Enter your phone number..."
-                keyboardType="phone-pad"
-                placeholderTextColor="#FBDABB"
-                style={styles.input}
-                value={profile.phone}
-                onChangeText={(text) => updateProfile('phone', text)}
+              <MaskedTextInput
+                  mask="(999) 999-9999"
+                  keyboardType="phone-pad"
+                  placeholder="Enter your phone number..."
+                  placeholderTextColor="#FBDABB"
+                  style={[
+                    styles.input,
+                    !validatePhone(profile.phone) && styles.inputError, 
+                  ]}
+                  value={profile.phone}
+                  onChangeText={(text, rawText) => updateProfile('phone', rawText)}
               />
 
               <Text style={styles.label}>Email Notification</Text>
@@ -170,13 +194,25 @@ const ProfileScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.row}>
-              <Pressable style={styles.button} onPress={saveProfile}>
-                <Text style={{ color: '#000' }}>Save</Text>
-              </Pressable>
+                <Pressable
+                    style={styles.button}
+                    onPress={() => saveProfile(profile)}
+                    disabled={!getIsFormValid?.(profile)} 
+                  >
+                    <Text style={{ color: '#000' }}>Save changes</Text>
+                  </Pressable>
 
-              <Pressable style={styles.button} onPress={() => navigation.navigate('WELCOME')}>
-                <Text style={{ color: '#000' }}>Log Out</Text>
-              </Pressable>
+
+              <Pressable
+                  style={styles.button}
+                  onPress={async () => {
+                    await AsyncStorage.removeItem('onboardingCompleted');
+                    navigation.navigate('WELCOME');
+                  }}
+                >
+                  <Text style={{ color: '#000' }}>Log Out</Text>
+                </Pressable>
+
             </View>
           </View>
         </ScrollView>
@@ -250,6 +286,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     width: '100%',
   },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 2,
+    shadowColor: 'red',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 6, // for Android
+  },
+  
   label: {
     marginBottom: 4,
     fontSize: 16,

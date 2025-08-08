@@ -5,7 +5,7 @@ export const validateEmail = (email: string) => {
 };
 // Validate name (only alphabetic characters, allow spaces, hyphens, apostrophes)
 export const validateName = (name: string): boolean => {
-  return name.trim().length > 0 && /^[a-zA-Z\s'-]+$/.test(name);
+  return typeof name === 'string' && name.trim().length > 0 && /^[a-zA-Z\s'-]+$/.test(name);
 };
 
 // Validate US phone number (10-digit numeric)
