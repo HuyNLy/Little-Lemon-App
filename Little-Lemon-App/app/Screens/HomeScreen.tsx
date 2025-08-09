@@ -12,6 +12,7 @@ import {
   View
 } from 'react-native';
 
+import { createTable, getMenuItems, saveMenuItems, filterByQueryAndCategories, getProfile } from '../../utils/database';
 const API_URL = 'https://raw.githubusercontent.com/Meta-Mobile-Developer-PC/Working-With-Data-API/main/capstone.json';
 
 type MenuItem = {
@@ -27,9 +28,38 @@ type Section = {
   name: string;
   data: MenuItem[];
 };
+
+
+type Profile = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string; 
+  image: string;
+  exclusiveOffers: boolean;
+  updatesNews: boolean;
+};
+
+const [profile, setProfile] = useState<Profile | null>(null);
+
+useEffect(() => {
+  const loadProfile = async () => {
+    try {
+      const data = await getProfile();
+      setProfile(data);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  loadProfile();
+}, []);
+
 const getInitials = (first: string, last: string) => {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
 };
+
+
 
 type ItemProps = {
   name: string;
@@ -141,12 +171,21 @@ const handleCategoryPress = (category: string) => {
             {/* Top Bar */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Pressable onPress={() => navigation.navigate('PROFILE')}>
-                <Image
-                  source={require('../../assets/images/Profile.png')}
-                  style={styles.profile}
-                  resizeMode="contain"
-                />
+                {profile === null ? (
+                  <View style={styles.avatarEmpty}>
+                    <Text style={{ color: '#fff', fontSize: 20 }}>
+                      {getInitials('', '')}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.avatarEmpty}>
+                    <Text style={{ color: '#ff0000ff', fontSize: 20 }}>
+                      {getInitials(profile.firstName, profile.lastName)}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
+
               <Image
                 source={require('../../assets/images/Logo.png')}
                 style={styles.logo}
@@ -367,6 +406,7 @@ const styles = StyleSheet.create({
     height: 100,
   },
   avatarEmpty: {
+    margin: 10,
     width: 50,
     height: 50,
     borderRadius: 25,
