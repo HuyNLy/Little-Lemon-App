@@ -21,6 +21,14 @@ A React Native capstone project built for the Meta Front-End Developer course. T
 - **TypeScript**
 - **SQLite** via `expo-sqlite`
 
+  
+----
+## 🖼️ Wireframe Preview
+🎨 Figma : https://www.figma.com/design/c6pmaWfsNaSuNFXwX2KHg6/canvas?m=auto&t=INZtcAkUVaFcEXQS-6
+![Wireframe](WireFrame.png)
+
+## 🚀 Demo
+
 
 ---
 
