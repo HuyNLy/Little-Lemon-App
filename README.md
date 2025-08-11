@@ -24,7 +24,10 @@ A React Native capstone project built for the Meta Front-End Developer course. T
   
 ----
 ## 🖼️ Wireframe Preview
-🎨 Figma : https://www.figma.com/design/c6pmaWfsNaSuNFXwX2KHg6/canvas?m=auto&t=INZtcAkUVaFcEXQS-6
+- 🎨 Figma : https://www.figma.com/design/c6pmaWfsNaSuNFXwX2KHg6/canvas?m=auto&t=INZtcAkUVaFcEXQS-6
+  <img width="730" height="692" alt="wireframeImg" src="https://github.com/user-attachments/assets/9346d19d-2513-4026-bd13-a7de02baf7e2" />
+
+
 ![Wireframe](WireFrame.png)
 
 ## 🚀 Demo
