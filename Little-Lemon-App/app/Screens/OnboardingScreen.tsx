@@ -16,6 +16,7 @@ import {
   View
 } from 'react-native';
 import { validateEmail, validateName } from '../../utils';
+import { getProfileByEmail, saveProfile as saveProfileToDB } from '../../utils/database';
 
 const OnboardingScreen = () => {
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -87,7 +88,7 @@ const OnboardingScreen = () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                placeholder="Enter your Email..."
+                placeholder="Enter your email..."
                 value={email}
                 onChangeText={onChangeEmail}
                 autoCapitalize="none"
@@ -106,14 +107,37 @@ const OnboardingScreen = () => {
                 },
               ]}
               onPress={async () => {
-                await AsyncStorage.setItem('onboardingCompleted', 'true');
-                await AsyncStorage.setItem('profile', JSON.stringify({
-                  firstName: name,
-                  lastName: lastName,
-                  email: email,
-                }));
-                navigation.navigate('HOME');
-              }}
+              const existingProfile = await getProfileByEmail(email);
+
+             if (!existingProfile) {
+                  const newProfile = {
+                    firstName: name,
+                    lastName: lastName,
+                    email: email,
+                    phone: '',
+                    image: '',
+                    exclusiveOffers: false,
+                    updatesNews: false,
+                  };
+
+                  try {
+                    await saveProfileToDB(newProfile); 
+                    await AsyncStorage.setItem('profile', JSON.stringify(newProfile));
+                    //console.log('New Profile saved:', newProfile);
+                  } catch (error) {
+                    console.error('Failed to save profile to DB:', error);
+                  }
+                } else {
+                  await AsyncStorage.setItem('profile', JSON.stringify(existingProfile));
+                  //console.log('Existing Profile loaded:', existingProfile);
+                }
+   
+              await AsyncStorage.setItem('onboardingCompleted', 'true');
+              navigation.navigate('HOME');
+            }}
+
+
+
               disabled={!isEmailValid || !isValidName(name)}
             >
               <Text style={styles.buttonText}>Next</Text>

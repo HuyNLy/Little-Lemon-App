@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import * as SQLite from 'expo-sqlite';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,7 +14,11 @@ import {
   View
 } from 'react-native';
 
-import { createTable, getMenuItems, saveMenuItems, filterByQueryAndCategories, getProfile } from '../../utils/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import debounce from 'lodash.debounce';
+
+import { createTable, getProfileByEmail } from '../../utils/database';
+
 const API_URL = 'https://raw.githubusercontent.com/Meta-Mobile-Developer-PC/Working-With-Data-API/main/capstone.json';
 
 type MenuItem = {
@@ -29,37 +35,21 @@ type Section = {
   data: MenuItem[];
 };
 
-
 type Profile = {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string; 
+  phone: string;
   image: string;
   exclusiveOffers: boolean;
   updatesNews: boolean;
 };
 
-const [profile, setProfile] = useState<Profile | null>(null);
-
-useEffect(() => {
-  const loadProfile = async () => {
-    try {
-      const data = await getProfile();
-      setProfile(data);
-    } catch (error) {
-      console.error('Failed to load profile:', error);
-    }
-  };
-
-  loadProfile();
-}, []);
+const db = SQLite.openDatabaseSync('little_lemon');
 
 const getInitials = (first: string, last: string) => {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
 };
-
-
 
 type ItemProps = {
   name: string;
@@ -94,10 +84,69 @@ const Item = ({ name, price, description, image }: ItemProps) => {
 };
 
 const HomeScreen = ({ navigation }: any) => {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>([]);
   const [data, setData] = useState<Section[]>([]);
-  const sectionListRef = useRef<SectionList>(null);
-  const [searchExpanded, setSearchExpanded] = useState(false);
+  const sectionListRef = useRef<SectionList | null>(null);
 
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
+  // Multi-select categories tracked with Set<string>
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+
+  // Debounce search text input changes
+  const debouncedSetSearchText = useMemo(
+    () =>
+      debounce((text: string) => {
+        setSearchText(text);
+      }, 300),
+    [setSearchText]
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedSetSearchText.cancel();
+    };
+  }, [debouncedSetSearchText]);
+
+  // Reload profile when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      const reloadProfile = async () => {
+        const profileString = await AsyncStorage.getItem('profile');
+        setProfile(JSON.parse(profileString || 'null'));
+      };
+      reloadProfile();
+    }, [])
+  );
+
+  // Load profile on mount
+useEffect(() => {
+  const initAndLoadProfile = async () => {
+    try {
+      await createTable();
+
+   
+      const emailToSearch = profile?.email || '';
+
+      const profileData = await getProfileByEmail(emailToSearch);
+
+      if (profileData) {
+        setProfile(profileData);
+        
+      } else {
+        //console.log('No profile found for email:', emailToSearch);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+  initAndLoadProfile();
+}, []);
+
+
+  // Fetch menu items on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -109,46 +158,54 @@ const HomeScreen = ({ navigation }: any) => {
           price: parseFloat(item.price),
           description: item.description,
           image: item.image,
-          category: item.category
+          category: item.category,
         }));
-
-        const categorized = ['starters', 'mains', 'desserts', 'drinks'].map(category => ({
-          name: category.charAt(0).toUpperCase() + category.slice(1),
-          data: menuItems.filter(item => item.category === category)
-        }));
-
-        setData(categorized);
+        setAllMenuItems(menuItems);
       } catch (error) {
         console.error(error);
         Alert.alert('Failed to load menu data');
       }
     };
-
     fetchData();
   }, []);
 
-  const categoryMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    data.forEach((section, index) => {
-      map[section.name] = index;
+  // Filter and categorize menu items on searchText or selectedCategories changes
+  useEffect(() => {
+    let filteredItems = allMenuItems.filter(
+      item =>
+        item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchText.toLowerCase())
+    );
+
+    if (selectedCategories.size > 0) {
+      filteredItems = filteredItems.filter(item =>
+        selectedCategories.has(item.category.charAt(0).toUpperCase() + item.category.slice(1))
+      );
+    }
+
+    const categories = ['starters', 'mains', 'desserts', 'drinks'];
+    const categorized = categories
+      .map(category => ({
+        name: category.charAt(0).toUpperCase() + category.slice(1),
+        data: filteredItems.filter(item => item.category === category),
+      }))
+      .filter(section => section.data.length > 0);
+
+    setData(categorized);
+  }, [searchText, selectedCategories, allMenuItems]);
+
+  // Toggle category selection on press
+  const handleCategoryPress = (category: string) => {
+    setSelectedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
     });
-    return map;
-  }, [data]);
-
-const [selectedCategory, setSelectedCategory] = useState('');
-
-const handleCategoryPress = (category: string) => {
-  setSelectedCategory(category); // highlight selected
-  const index = categoryMap[category];
-  if (index !== undefined && sectionListRef.current) {
-    sectionListRef.current.scrollToLocation({
-      sectionIndex: index,
-      itemIndex: 0,
-      animated: true,
-    });
-  }
-};
-
+  };
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -156,46 +213,33 @@ const handleCategoryPress = (category: string) => {
         ref={sectionListRef}
         style={styles.sectionList}
         sections={data}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <Item
-            name={item.name}
-            price={item.price}
-            description={item.description}
-            image={item.image}
-          />
+          <Item name={item.name} price={item.price} description={item.description} image={item.image} />
         )}
-        
         ListHeaderComponent={
           <>
             {/* Top Bar */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Pressable onPress={() => navigation.navigate('PROFILE')}>
-                {profile === null ? (
+                {profile === null || !profile.image ? (
                   <View style={styles.avatarEmpty}>
                     <Text style={{ color: '#fff', fontSize: 20 }}>
-                      {getInitials('', '')}
+                      {profile ? getInitials(profile.firstName || '', profile.lastName || '') : ''}
                     </Text>
                   </View>
                 ) : (
-                  <View style={styles.avatarEmpty}>
-                    <Text style={{ color: '#ff0000ff', fontSize: 20 }}>
-                      {getInitials(profile.firstName, profile.lastName)}
-                    </Text>
+                  <View style={styles.profile}>
+                    <Image
+                      source={{ uri: profile.image }}
+                      style={{ width: '100%', height: '100%', borderRadius: 30 }}
+                    />
                   </View>
                 )}
               </Pressable>
 
-              <Image
-                source={require('../../assets/images/Logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <Image
-                source={require('../../assets/images/bag.png')}
-                style={styles.bag}
-                resizeMode="contain"
-              />
+              <Image source={require('../../assets/images/Logo.png')} style={styles.logo} resizeMode="contain" />
+              <Image source={require('../../assets/images/bag.png')} style={styles.bag} resizeMode="contain" />
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>1</Text>
               </View>
@@ -219,23 +263,21 @@ const handleCategoryPress = (category: string) => {
                 />
               </View>
               <View style={styles.searchContainer}>
-                  {searchExpanded ? (
-                    <TextInput
-                      placeholder="Search..."
-                      placeholderTextColor="#495e57"
-                      style={styles.searchInput}
-                      onBlur={() => setSearchExpanded(false)} // collapse when focus is lost
-                      autoFocus
-                    />
-                  ) : (
-                    <Pressable onPress={() => setSearchExpanded(true)}>
-                      <Image
-                        source={require('../../assets/images/search-icon.png')} // your telescope icon
-                        style={styles.searchIcon}
-                      />
-                    </Pressable>
-                  )}
-                </View>
+                {searchExpanded ? (
+                  <TextInput
+                    placeholder="Search..."
+                    placeholderTextColor="#495e57"
+                    style={styles.searchInput}
+                    onBlur={() => setSearchExpanded(false)}
+                    autoFocus
+                    onChangeText={debouncedSetSearchText}
+                  />
+                ) : (
+                  <Pressable onPress={() => setSearchExpanded(true)}>
+                    <Image source={require('../../assets/images/search-icon.png')} style={styles.searchIcon} />
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             {/* Delivery Callout */}
@@ -243,29 +285,19 @@ const handleCategoryPress = (category: string) => {
 
             {/* Category Buttons */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-                {data.map((section) => {
-                  const isSelected = selectedCategory === section.name;
-
-                  return (
-                    <Pressable
-                      key={section.name}
-                      style={[
-                        styles.categoryButton,
-                        isSelected && { backgroundColor: '#495e57'  } // highlight if selected
-                      ]}
-                      onPress={() => handleCategoryPress(section.name)}
-                    >
-                      <Text style={[
-                        styles.categoryText,
-                        isSelected && { color: 'white' } 
-                      ]}>
-                        {section.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-
+              {['Starters', 'Mains', 'Desserts', 'Drinks'].map(category => {
+                const isSelected = selectedCategories.has(category);
+                return (
+                  <Pressable
+                    key={category}
+                    style={[styles.categoryButton, isSelected && { backgroundColor: '#495e57' }]}
+                    onPress={() => handleCategoryPress(category)}
+                  >
+                    <Text style={[styles.categoryText, isSelected && { color: 'white' }]}>{category}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </>
         }
       />
@@ -273,13 +305,11 @@ const handleCategoryPress = (category: string) => {
   );
 };
 
-
 const styles = StyleSheet.create({
-  title:{
-      fontSize: 64,
-      fontWeight: 'bold',
-      marginBottom: 20,
-
+  title: {
+    fontSize: 64,
+    fontWeight: 'bold',
+    marginBottom: 20,
   },
   container: {
     flex: 1,
@@ -289,22 +319,20 @@ const styles = StyleSheet.create({
   logo: {
     marginTop: 10,
     marginBottom: 50,
-    alignSelf: 'center'
+    alignSelf: 'center',
   },
-  profile:{
-    width:60,
-    height:60,
+  profile: {
+    width: 60,
+    height: 60,
     borderRadius: 30,
     borderColor: '#49SE57',
     borderWidth: 2,
     margin: 10,
-
   },
-  bag:{
-    width:40,
-    height:40,
+  bag: {
+    width: 40,
+    height: 40,
     margin: 10,
-
   },
   badge: {
     position: 'absolute',
@@ -313,18 +341,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'red',
     borderRadius: 10,
     paddingHorizontal: 6,
-    paddingVertical: 2
+    paddingVertical: 2,
   },
   badgeText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 12
+    fontSize: 12,
   },
   header: {
     padding: 12,
-    flexDirection: "row",
-    justifyContent: "center",
-    backgroundColor: "#dee3e9",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    backgroundColor: '#dee3e9',
   },
   categoryScroll: {
     flexDirection: 'row',
@@ -342,7 +370,6 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: 'bold',
   },
- 
   sectionList: {
     paddingHorizontal: 16,
   },
@@ -369,7 +396,6 @@ const styles = StyleSheet.create({
     height: 24,
     tintColor: '#495e57',
   },
-  
   item: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -385,7 +411,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     paddingVertical: 8,
     color: '#495e57',
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   name: {
     fontSize: 20,
@@ -411,8 +437,8 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     backgroundColor: '#0b9a6a',
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroSection: {
     backgroundColor: '#495e57',
@@ -438,7 +464,6 @@ const styles = StyleSheet.create({
   },
   heroContent: {
     flex: 1,
-   
   },
   heroImage: {
     width: 110,
@@ -449,13 +474,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     padding: 15,
-  }
-  
+  },
 });
 
 export default HomeScreen;
-
-
-
-
-

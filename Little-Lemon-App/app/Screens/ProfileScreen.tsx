@@ -4,6 +4,7 @@ import Checkbox from 'expo-checkbox';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { MaskedTextInput } from 'react-native-mask-text';
+import { saveProfile as saveProfileToDB } from '../../utils/database';
 
 import {
   Image,
@@ -24,8 +25,8 @@ const ProfileScreen = ({ navigation }: any) => {
     firstName: "",
     lastName: "",
     email: "",
-    phone: '',
-    image: '',
+    phone: "",
+    image: "",
     exclusiveOffers: false,
     updatesNews: false,
   });
@@ -60,14 +61,22 @@ const ProfileScreen = ({ navigation }: any) => {
     }));
   };
 
-  const saveProfile = async (profileData: any) => {
-    try {
-      await AsyncStorage.setItem('profile', JSON.stringify(profileData));
-      console.log('Profile saved!', profileData);
-    } catch (error) {
-      console.error('Error saving profile:', error);
-    }
-  };
+const saveProfile = async (profileData: any) => {
+  try {
+    // Save locally
+    await AsyncStorage.setItem('profile', JSON.stringify(profileData));
+    //console.log('Profile saved locally!');
+
+    await saveProfileToDB({
+      ...profileData,
+      exclusiveOffers: profileData.exclusiveOffers ? 1 : 0,
+      updatesNews: profileData.updatesNews ? 1 : 0,
+    });
+    
+  } catch (error) {
+    console.error('Error saving profile:', error);
+  }
+};
 
   const getIsFormValid = (data: any) => {
     return (
@@ -80,14 +89,23 @@ const ProfileScreen = ({ navigation }: any) => {
   
   useEffect(() => {
     const loadProfile = async () => {
-      const stored = await AsyncStorage.getItem('profile');
-      if (stored) setProfile(JSON.parse(stored));
+      try {
+        const stored = await AsyncStorage.getItem('profile');
+        
+        const storedProfile = JSON.parse(stored || '{}');
+        setProfile({
+            ...storedProfile,
+            exclusiveOffers: !!storedProfile.exclusiveOffers,
+            updatesNews: !!storedProfile.updatesNews,
+          });
+
+        
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
     };
     loadProfile();
   }, []);
-  
-  
-  
 
   return (
     <ImageBackground
@@ -96,7 +114,7 @@ const ProfileScreen = ({ navigation }: any) => {
       style={{ flex: 1 }}
     >
       <KeyboardAvoidingView
-        
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
@@ -155,6 +173,7 @@ const ProfileScreen = ({ navigation }: any) => {
                 style={[styles.input, !validateEmail(profile.email) && styles.inputError]}
                 value={profile.email}
                 onChangeText={(text) => updateProfile('email', text)}
+                autoCapitalize="none"
               />
 
               <Text style={styles.label}>Phone Number</Text>
@@ -168,7 +187,7 @@ const ProfileScreen = ({ navigation }: any) => {
                     !validatePhone(profile.phone) && styles.inputError, 
                   ]}
                   value={profile.phone}
-                  onChangeText={(text, rawText) => updateProfile('phone', rawText)}
+                  onChangeText={(text, rawText) => updateProfile('phone', rawText || '')}
               />
 
               <Text style={styles.label}>Email Notification</Text>
@@ -195,19 +214,23 @@ const ProfileScreen = ({ navigation }: any) => {
 
             <View style={styles.row}>
                 <Pressable
-                    style={styles.button}
+                    style={[
+                      styles.button,
+                      !getIsFormValid(profile) && { opacity: 0.5 , backgroundColor: '#495e57' }
+                    ]}
                     onPress={() => saveProfile(profile)}
-                    disabled={!getIsFormValid?.(profile)} 
+                    disabled={!getIsFormValid(profile)} 
                   >
                     <Text style={{ color: '#000' }}>Save changes</Text>
                   </Pressable>
-
 
               <Pressable
                   style={styles.button}
                   onPress={async () => {
                     await AsyncStorage.removeItem('onboardingCompleted');
+                    await AsyncStorage.removeItem('profile');
                     navigation.navigate('WELCOME');
+                   
                   }}
                 >
                   <Text style={{ color: '#000' }}>Log Out</Text>
@@ -293,7 +316,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 6,
-    elevation: 6, // for Android
+    elevation: 6,
   },
   
   label: {
