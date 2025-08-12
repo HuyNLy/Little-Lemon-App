@@ -33,6 +33,10 @@ A React Native capstone project built for the Meta Front-End Developer course. T
 ## 🚀 Demo
 
 
+
+https://github.com/user-attachments/assets/b5c601c2-fa89-47a6-9bac-774ee142b232
+
+
 ---
 
 ## 📦 Installation
